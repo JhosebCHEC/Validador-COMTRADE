@@ -38,10 +38,11 @@ _BLOCK_COLORS = [
 class DisturbanceReportBlockTable(QFrame):
     """Widget para UN bloque BxRBDR específico."""
 
-    def __init__(self, block_name: str, signals: list, parent=None):
+    def __init__(self, block_name: str, signals: list, std_start_map: dict | None = None, parent=None):
         super().__init__(parent)
         self._block_name = block_name
         self._signals = signals
+        self._std_start_map = std_start_map or {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -121,13 +122,19 @@ class DisturbanceReportBlockTable(QFrame):
         table.setColumnWidth(3, 90)
 
         for r, sig in enumerate(self._signals):
+            sig_name = (sig.name or "").strip()
+            std_start = self._std_start_map.get(sig_name.upper(), "")
+            is_valid = bool(std_start)
+
             # V (Vacío hasta validar)
-            item_v = QTableWidgetItem("")
+            item_v = QTableWidgetItem("✔" if is_valid else "")
             item_v.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if is_valid:
+                item_v.setForeground(QBrush(QColor("#00883A")))
             table.setItem(r, 0, item_v)
 
             # Señal (Name)
-            item_name = QTableWidgetItem(sig.name)
+            item_name = QTableWidgetItem(sig_name)
             item_name.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             item_name.setToolTip(sig.description) # Descripción como tooltip
             if "On" in sig.trig_operation:
@@ -142,8 +149,8 @@ class DisturbanceReportBlockTable(QFrame):
                 item_trig.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
             table.setItem(r, 2, item_trig)
 
-            # Start Std (Vacio "-")
-            item_std = QTableWidgetItem("-")
+            # Start Std desde XLSX si coincide
+            item_std = QTableWidgetItem(std_start if std_start else "-")
             item_std.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(r, 3, item_std)
 
@@ -159,9 +166,10 @@ class DisturbanceReportBlockTable(QFrame):
 class DisturbanceReportContainer(QWidget):
     """Contenedor que agrupa tablas de reporte de disturbios por bloque."""
     
-    def __init__(self, signals: list, parent=None):
+    def __init__(self, signals: list, std_start_map: dict | None = None, parent=None):
         super().__init__(parent)
         self._signals = signals
+        self._std_start_map = std_start_map or {}
         self._setup_ui()
     
     def _setup_ui(self):
@@ -193,7 +201,7 @@ class DisturbanceReportContainer(QWidget):
         col = 0
         max_cols = 2
         for block_name, block_signals in blocks_map.items():
-            table_widget = DisturbanceReportBlockTable(block_name, block_signals)
+            table_widget = DisturbanceReportBlockTable(block_name, block_signals, self._std_start_map)
             layout.addWidget(table_widget, row, col)
             col += 1
             if col >= max_cols:
@@ -211,11 +219,13 @@ class BlockTable(QFrame):
     """Widget que representa un solo bloque (AxRADR / BxRBDR) como tabla compacta."""
 
     def __init__(self, block_name: str, signals: list, signal_type: str,
-                 color_bg: str, color_fg: str, parent=None):
+                 color_bg: str, color_fg: str, std_start_map: dict | None = None,
+                 parent=None):
         super().__init__(parent)
         self._block_name = block_name
         self._signals = signals
         self._signal_type = signal_type
+        self._std_start_map = std_start_map or {}
         self._setup_ui(color_bg, color_fg)
 
     def _setup_ui(self, color_bg: str, color_fg: str):
@@ -270,9 +280,8 @@ class BlockTable(QFrame):
         self._table = table
 
     def _build_analog_table(self, table: QTableWidget):
-        # Columnas ajustadas para incluir Descripción con STRETCH
-        # Se agrega columna V para validación COMTRADE
-        cols = ["V", "Señal", "Start XRIO", "Description", "Fase", "Unidad", "Prim"]
+        # Columnas analógicas validadas contra estándar XLSX
+        cols = ["V", "Señal", "Start XRIO", "Start Std", "Fase", "Unidad", "Prim"]
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels(cols)
         table.setRowCount(len(self._signals))
@@ -283,7 +292,7 @@ class BlockTable(QFrame):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)            # V
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)          # Señal
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)            # Start XRIO
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)          # Description
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)            # Start Std
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)            # Fase
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)            # Unidad
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)            # Prim
@@ -291,26 +300,32 @@ class BlockTable(QFrame):
         # Anchos iniciales
         table.setColumnWidth(0, 32)
         table.setColumnWidth(2, 95)
+        table.setColumnWidth(3, 90)
         table.setColumnWidth(4, 60)
         table.setColumnWidth(5, 80)
         table.setColumnWidth(6, 95)
 
         for r, sig in enumerate(self._signals):
-            # V (Validación vacía por ahora - icono verde removido)
-            item_v = QTableWidgetItem("")
+            sig_name = (sig.name or "").strip()
+            std_start = self._std_start_map.get(sig_name.upper(), "")
+            is_valid = bool(std_start)
+
+            # V validación por coincidencia contra XLSX
+            item_v = QTableWidgetItem("✔" if is_valid else "")
             item_v.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if is_valid:
+                item_v.setForeground(QBrush(QColor("#00883A")))
             table.setItem(r, 0, item_v)
 
-            description = sig.description if hasattr(sig, 'description') else ""
             status = sig.status if hasattr(sig, 'status') else "On"
 
             items = [
                 # Column 1: Señal
-                sig.name,
+                sig_name,
                 # Column 2: Start XRIO
                 status,
-                # Column 3: Description
-                description,
+                # Column 3: Start Std (desde XLSX)
+                std_start if std_start else "-",
                 # Column 4: Fase
                 sig.phase,
                 # Column 5: Unidad
@@ -322,16 +337,16 @@ class BlockTable(QFrame):
             for i, txt in enumerate(items):
                 col_idx = i + 1
                 it = QTableWidgetItem(txt)
-                # Alinear izquierda Nombre (1) y Descripción (3)
+                # Alinear izquierda solo Nombre (1)
                 align = (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter 
-                         if col_idx in [1, 3] else Qt.AlignmentFlag.AlignCenter)
+                         if col_idx == 1 else Qt.AlignmentFlag.AlignCenter)
                 it.setTextAlignment(align)
-                if col_idx in [1, 3]:
+                if col_idx == 1:
                     it.setToolTip(txt)
                 table.setItem(r, col_idx, it)
 
     def _build_binary_table(self, table: QTableWidget):
-        cols = ["V", "Señal", "Descripción", "Función"]
+        cols = ["V", "Señal", "Start XRIO", "Start Std"]
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels(cols)
         table.setRowCount(len(self._signals))
@@ -340,40 +355,44 @@ class BlockTable(QFrame):
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)            # V
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)          # Señal
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)          # Descripción (Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)            # Función
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)            # Start XRIO
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)            # Start Std
 
         table.setColumnWidth(0, 28)
-        table.setColumnWidth(3, 120)
+        table.setColumnWidth(2, 95)
+        table.setColumnWidth(3, 95)
 
-        # green = QColor("#198754") # No usar verde hasta validar
         for r, sig in enumerate(self._signals):
-            # Columna V (vacia por ahora)
-            chk = QTableWidgetItem("") 
+            sig_name = (sig.name or "").strip()
+            std_start = self._std_start_map.get(sig_name.upper(), "")
+            is_valid = bool(std_start)
+
+            # V validación por coincidencia contra XLSX
+            chk = QTableWidgetItem("✔" if is_valid else "")
             chk.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            # chk.setForeground(QBrush(green))
+            if is_valid:
+                chk.setForeground(QBrush(QColor("#00883A")))
             table.setItem(r, 0, chk)
 
             # Nombre
-            name_it = QTableWidgetItem(sig.name)
+            name_it = QTableWidgetItem(sig_name)
             name_it.setTextAlignment(
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(r, 1, name_it)
-            
-            # Descripción
-            desc = sig.description if hasattr(sig, 'description') else ""
-            desc_it = QTableWidgetItem(desc)
-            desc_it.setTextAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-             # color gris para description
-            desc_it.setForeground(QBrush(QColor("#6c757d")))
-            table.setItem(r, 2, desc_it)
 
-            # Función
-            func_it = QTableWidgetItem(sig.function.value if sig.function else "")
-            func_it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            func_it.setForeground(QBrush(QColor("#495057")))
-            table.setItem(r, 3, func_it)
+            # Start XRIO desde estado binario
+            start_xrio = "On" if getattr(sig, 'state', 0) == 1 else "Off"
+            xrio_it = QTableWidgetItem(start_xrio)
+            xrio_it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if start_xrio == "On":
+                xrio_it.setForeground(QBrush(QColor("#00883A")))
+                xrio_it.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            table.setItem(r, 2, xrio_it)
+
+            # Start Std
+            std_it = QTableWidgetItem(std_start if std_start else "-")
+            std_it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            table.setItem(r, 3, std_it)
 
     @property
     def block_name(self) -> str:
@@ -509,6 +528,7 @@ class XRIOTab(QWidget):
         data_excel = os.path.join("data", "Estándar COMTRADE.xlsx")
         excel_path = root_excel if os.path.exists(root_excel) else data_excel
         self._excel_parser = ExcelStandardParser(excel_path)
+        self._std_start_map: dict[str, str] = {}
         self._xrio_data: XRIOData | None = None
         self._block_widgets: list[BlockTable] = []
         self._comparison_widgets: list[ComparisonBlockTable] = []
@@ -616,6 +636,12 @@ class XRIOTab(QWidget):
         warnings = []
 
         try:
+            self._std_start_map = self._build_std_start_map()
+        except Exception as e:
+            self._std_start_map = {}
+            warnings.append(f"No se pudo cargar estándar XLSX para validación: {e}")
+
+        try:
             self._update_relay_bar()
         except Exception as e:
             warnings.append(f"Error actualizando barra de relé: {e}")
@@ -660,7 +686,10 @@ class XRIOTab(QWidget):
 
         # Mostrar BxRBDR (Disturbance Report) como parte importante del XRIO
         if self._xrio_data.disturbance_report_signals:
-            dr_widget = DisturbanceReportTable(self._xrio_data.disturbance_report_signals)
+            dr_widget = DisturbanceReportTable(
+                self._xrio_data.disturbance_report_signals,
+                self._std_start_map
+            )
             self._block_widgets.append(dr_widget)
             self._grid_layout.addWidget(dr_widget, current_row, 0, 1, 2)
             current_row += 1
@@ -685,7 +714,7 @@ class XRIOTab(QWidget):
 
         for block_name, signals, sig_type in all_blocks:
             bg, fg = _BLOCK_COLORS[color_idx % len(_BLOCK_COLORS)]
-            widget = BlockTable(block_name, signals, sig_type, bg, fg)
+            widget = BlockTable(block_name, signals, sig_type, bg, fg, self._std_start_map)
             self._block_widgets.append(widget)
             self._grid_layout.addWidget(widget, row, col)
 
@@ -694,6 +723,36 @@ class XRIOTab(QWidget):
             if col >= max_cols:
                 col = 0
                 row += 1
+
+    def _build_std_start_map(self) -> dict[str, str]:
+        """Construye mapa de validación desde XLSX: NOMBRE_SEÑAL -> Start Std."""
+        std_map: dict[str, str] = {}
+        if not self._xrio_data:
+            return std_map
+
+        relay_model = (self._xrio_data.relay.model or "").strip()
+        if not relay_model:
+            return std_map
+
+        available_models = self._excel_parser.get_available_models()
+        best_match = None
+        for model in available_models:
+            if model.upper() in relay_model.upper() or relay_model.upper() in model.upper():
+                best_match = model
+                break
+
+        if not best_match:
+            return std_map
+
+        standard_data = self._excel_parser.parse_sheet(best_match)
+        for _, rows in standard_data.items():
+            for row in rows:
+                signal_name = (row.get('name') or '').strip()
+                start_std = (row.get('group') or '').strip()
+                if signal_name and signal_name.upper() not in std_map:
+                    std_map[signal_name.upper()] = start_std
+
+        return std_map
 
     def _group_by_block(self, signals: list) -> OrderedDict:
         blocks = OrderedDict()
@@ -785,6 +844,10 @@ class XRIOTab(QWidget):
         ftype = self._filter_type.currentIndex()  # 0=all, 1=analog, 2=binary
 
         for w in self._block_widgets:
+            if not hasattr(w, 'block_name'):
+                w.show()
+                continue
+
             # Filtro por tipo
             is_analog = w.block_name.upper().endswith("RADR") or "RADR" in w.block_name.upper()
             if ftype == 1 and not is_analog:
