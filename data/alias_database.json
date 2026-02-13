@@ -1,0 +1,29 @@
+{
+  "UNKNOWN::MANUFACTURER": {
+    "relay_name": "MANUFACTURER",
+    "standard_name": "F",
+    "relay_model": "UNKNOWN",
+    "signal_type": "analog",
+    "function": "Desconocido",
+    "auto_detected": true,
+    "validated": false
+  },
+  "UNKNOWN::PROTECTED_OBJECT_NAME": {
+    "relay_name": "PROTECTED_OBJECT_NAME",
+    "standard_name": "P",
+    "relay_model": "UNKNOWN",
+    "signal_type": "analog",
+    "function": "Desconocido",
+    "auto_detected": true,
+    "validated": false
+  },
+  "UNKNOWN::RESIDUALFACTORS": {
+    "relay_name": "RESIDUALFACTORS",
+    "standard_name": "F",
+    "relay_model": "UNKNOWN",
+    "signal_type": "analog",
+    "function": "Sobretensión",
+    "auto_detected": true,
+    "validated": false
+  }
+}
